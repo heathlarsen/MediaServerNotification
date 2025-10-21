@@ -1,5 +1,131 @@
 ﻿@page "/"
+@using MediaServerNotification.Models
+@using MediaServerNotification.Services.Interfaces
 
-<h1>Hello, world!</h1>
+@inject IMediaServerService<PlexMediaServerSettings> _serverService;
+@inject IMediaServerManagerService _serverSettingsService;
+@inject DialogService DialogService
 
-Welcome to your new app.
+<RadzenFab Icon="add" Click="() => AddOrUpdateMediaServer()" />
+
+@if (MediaServers.Count == 0)
+{
+    <RadzenText Text="No Server Configured" />
+}
+
+<RadzenStack Orientation="Orientation.Vertical" JustifyContent="JustifyContent.SpaceBetween" Style="height:100%;">
+    <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+        @foreach (var server in MediaServers)
+        {
+            <RadzenPanel AllowCollapse="true" Collapsed="@IsCollapsed(server.Id)" @onclick="() => TogglePanel(server.Id)" style="cursor: pointer">
+                <HeaderTemplate>
+                    <RadzenText Text="@server.Settings.Name" TextStyle="TextStyle.DisplayH5" Style="margin-bottom: 0px"/>
+                </HeaderTemplate>
+                <SummaryTemplate>
+                </SummaryTemplate>
+                <ChildContent>
+                    <RadzenStack Gap="0.5rem" Style="padding-top:0.5rem">
+                        <RadzenText Text="@server.Settings.ServerAddress" TextStyle="TextStyle.Body1" />
+                        <RadzenFieldset Text="Steams">
+                            <div>Direct Plays: @server.Stats.Streams.Count(x => x.StreamType == StreamType.DirectPlay)</div>
+                            <div>Direct Streams: @server.Stats.Streams.Count(x => x.StreamType == StreamType.DirectStream)</div>
+                            <div>Transcodes: @server.Stats.Streams.Count(x => x.StreamType == StreamType.Transcode)</div>
+                        </RadzenFieldset>
+                        <RadzenFieldset Text="Resources">
+                            <div>CPU: @(Math.Round(@server.Stats.Resources.HostCpuUsagePercent, 0))%</div>
+                            <div>Memory: @(Math.Round(@server.Stats.Resources.HostMemoryUsagePercent, 0))%</div>
+                        </RadzenFieldset>
+                        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Stretch" Gap="0.5rem">
+                            <RadzenButton Icon="edit" Click="() => AddOrUpdateMediaServer(update: server)" @onclick:stopPropagation="true" Style="width:100%" />
+                            <RadzenButton Icon="shadow_add" Click="() => AddOrUpdateMediaServer(copyFrom: server)" @onclick:stopPropagation="true" Style="width:100%" />
+                            <RadzenButton Icon="delete" Click="() => DeleteMediaServer(server)" @onclick:stopPropagation="true" Style="width:100%" />
+                        </RadzenStack>
+                    </RadzenStack>
+                </ChildContent>
+            </RadzenPanel>
+        }
+    </RadzenStack>
+    @* <RadzenButton Click="AddMediaServer">Add Media Server</RadzenButton> *@
+</RadzenStack>
+
+@code {
+    private List<MediaServer> MediaServers = new();
+    private HashSet<Guid> collapsedPanels = new();
+
+    override protected async Task OnInitializedAsync()
+    {
+        await LoadServersAsync();
+        await base.OnInitializedAsync();
+    }
+
+    private async Task LoadServersAsync()
+    {
+        MediaServers.Clear();
+        collapsedPanels.Clear();
+        var allServers = _serverSettingsService.GetAll();
+        foreach (var server in allServers)
+        {
+            MediaServers.Add(server);
+            // start collapsed by default; remove this line if you want them expanded initially
+            collapsedPanels.Add(server.Id);
+        }
+    }
+
+    private bool IsCollapsed(Guid id) => collapsedPanels.Contains(id);
+
+    private void TogglePanel(Guid id)
+    {
+        if (!collapsedPanels.Add(id))
+            collapsedPanels.Remove(id);
+        StateHasChanged();
+    }
+
+    private async Task AddOrUpdateMediaServer(MediaServer? update = null, MediaServer? copyFrom = null)
+    {
+        var parameters = new Dictionary<string, object>();
+
+        if (update is not null)
+            parameters.Add(nameof(ServerConfig.ServerForEdit), update);
+
+        if (copyFrom is not null)
+            parameters.Add(nameof(ServerConfig.ServerForCopy), copyFrom);
+
+        var newServer = await DialogService.OpenSideAsync<ServerConfig>(
+            "Add Media Server",
+            parameters: parameters,
+            options: new SideDialogOptions
+            {
+                Position = DialogPosition.Bottom,
+                ShowMask = true,
+                ShowClose = false,
+                CloseDialogOnOverlayClick = true
+            }
+        );
+
+        if (newServer is not MediaServer)
+            return;
+
+        _serverSettingsService.AddOrUpdate(newServer);
+        MediaServers.Add(newServer);
+        // ensure the newly added server starts collapsed
+        collapsedPanels.Add(newServer.Id);
+    }
+
+    private async Task DeleteMediaServer(MediaServer server)
+    {
+        ConfirmOptions confirmOptions = new()
+        {
+            ShowTitle = false,
+            ShowClose = false,
+            CloseDialogOnOverlayClick = true
+        };
+        var response = await DialogService.Confirm("Delete server?", options: confirmOptions);
+        
+        if (response is null or false)
+            return;
+        
+        _serverSettingsService.Delete(server.Id);
+        await LoadServersAsync();
+        StateHasChanged();
+    }
+}

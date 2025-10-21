@@ -1,5 +1,6 @@
 ﻿/*#if (SampleContent)*/
-html, body {
+html, body, #app {
+    height: 100%;
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
@@ -19,6 +20,7 @@ a, .btn-link {
 
 .content {
     padding-top: 1.1rem;
+    padding-bottom: 1.1rem;
 }
 
 /*#endif*/

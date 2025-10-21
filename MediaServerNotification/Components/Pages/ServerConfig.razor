@@ -1,0 +1,111 @@
+﻿@using MediaServerNotification.Models
+@using MediaServerNotification.Services.Interfaces
+
+@inject DialogService DialogService
+
+@if (model is null)
+{
+    <RadzenStack>
+        @foreach (var serverType in Enum.GetValues(typeof(MediaServerType)).Cast<MediaServerType>())
+        {
+            <RadzenButton Text=@serverType.ToString() Click=@(() => SetServerType(serverType)) Style=@($"background-color: {serverType.GetBrandColor()} !important") />
+        }
+    </RadzenStack>
+}
+else
+{
+    <RadzenTemplateForm TItem="MediaServer" Data=@model Submit=@OnSubmit InvalidSubmit="OnInvalidSubmit">
+        <RadzenStack Orientation="Orientation.Vertical" JustifyContent="JustifyContent.SpaceBetween" Style="height:100%">
+            <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+                <RadzenFieldset Text="Server Details">
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+                        <RadzenFormField Text="Server Name">
+                            <RadzenTextBox @bind-Value="model.Settings.Name" />
+                        </RadzenFormField>
+                        <RadzenFormField Text="Server Address">
+                            <RadzenTextBox @bind-Value="model.Settings.ServerAddress" />
+                        </RadzenFormField>
+                        <RadzenFormField Text="Server Memory Capacity (GB)">
+                            <RadzenNumeric @bind-Value="model.Settings.HostMemoryCapactity" />
+                        </RadzenFormField>
+                        @switch (model.ServerType)
+                        {
+                            case MediaServerType.Plex:
+
+                                <RadzenFormField Text="Plex Token">
+                                    <RadzenTextBox @bind-Value="(model.Settings as PlexMediaServerSettings).PlexToken" />
+                                </RadzenFormField>
+                                break;
+                            case MediaServerType.Emby:
+                                // Emby specific settings can be added here
+                                break;
+                            case MediaServerType.Jellyfin:
+                                // Jellyfin specific settings can be added here
+                                break;
+                        }
+                    </RadzenStack>
+                </RadzenFieldset>
+                
+                <RadzenFieldset Text="Persistant Notification">
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+                        <RadzenStack Gap="0.5rem" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center">
+                            <RadzenLabel Text="Enable Notification" />
+                            <RadzenSwitch @bind-Value="model.Settings.EnableNotification" />
+                        </RadzenStack>
+                        @if (model.Settings.EnableNotification)
+                        {
+                            <RadzenFormField Text="Refresh Frequency (minutes)">
+                                <RadzenNumeric @bind-Value="model.Settings.NotificationUpdateFrequency" />
+                            </RadzenFormField>
+                        }
+                    </RadzenStack>
+                </RadzenFieldset>
+
+            </RadzenStack>
+
+            <RadzenButton Text="Save" ButtonType="ButtonType.Submit" />
+        </RadzenStack>
+    </RadzenTemplateForm>
+}
+
+@code {
+    [Parameter]
+    public MediaServer? ServerForEdit { get; set; } = null;
+
+    [Parameter]
+    public MediaServer? ServerForCopy { get; set; } = null;
+
+    // [CascadingParameter]
+    // private Dialog _dialog { get; set; }
+
+    public MediaServer? model = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (ServerForEdit != null)
+            model = ServerForEdit;
+        else if (ServerForCopy != null)
+        {
+            model = ServerForCopy;
+            model.Id = Guid.NewGuid();
+        }
+
+        await base.OnInitializedAsync();
+    }
+
+    private void SetServerType(MediaServerType serverType)
+    {
+        model = serverType.ToMediaServer();
+        // _dialog.Options.Height = "80%";
+    }
+
+    private async Task OnSubmit()
+    {
+        await DialogService.CloseSideAsync(model);
+    }
+
+    private async Task OnInvalidSubmit()
+    {
+
+    }
+}

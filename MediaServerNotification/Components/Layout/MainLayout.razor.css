@@ -2,10 +2,21 @@
     position: relative;
     display: flex;
     flex-direction: column;
+    height: 100%; /* ensure the page fills the viewport */
 }
 
 main {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Make the article that holds @Body stretch so inner components can use 100% height */
+article.content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0; /* allow children to scroll when needed */
 }
 
 .sidebar {
