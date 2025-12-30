@@ -11,21 +11,21 @@ namespace MediaServerNotification.Models
         /// <summary>
         /// The CPU usage of the host
         /// </summary>
-        public double HostCpuUsagePercent;
+        public double HostCpuUsagePercent { get; set; }
 
         /// <summary>
         /// The CPU usage of the server application
         /// </summary>
-        public double ProcessCpuUsagePercent;
+        public double ProcessCpuUsagePercent { get; set; }
 
         /// <summary>
         /// The memory usage of the host
         /// </summary>
-        public double HostMemoryUsagePercent;
+        public double HostMemoryUsagePercent { get; set; }
 
         /// <summary>
         /// The memory usage of the server application
         /// </summary>
-        public double ProcessMemoryUsagePercent;
+        public double ProcessMemoryUsagePercent { get; set; }
     }
 }
