@@ -135,34 +135,43 @@ public class MediaServerStateService : IMediaServerStateService
 
         while (!cancellationToken.IsCancellationRequested)
         {
+            List<MediaServer> allServers;
             List<MediaServer> enabledServers;
+            List<MediaServer> serversToPoll;
             try
             {
-                enabledServers = (_storeService.GetAll() ?? new List<MediaServer>())
-                    .Where(s => s?.Settings?.EnableNotification == true)
+                allServers = (_storeService.GetAll() ?? new List<MediaServer>())
+                    .Where(s => s is not null)
+                    .ToList();
+
+                enabledServers = allServers
+                    .Where(s => s.Settings?.EnableNotification == true)
                     .ToList();
             }
             catch
             {
+                allServers = new List<MediaServer>();
                 enabledServers = new List<MediaServer>();
             }
 
             EnabledServerCountUpdated?.Invoke(enabledServers.Count);
 
-            // Reconcile schedule to current enabled set.
-            var enabledIds = enabledServers.Select(s => s.Id).ToHashSet();
-            foreach (var stale in nextDueByServer.Keys.Where(id => !enabledIds.Contains(id)).ToList())
+            serversToPoll = isForeground ? allServers : enabledServers;
+
+            // Reconcile schedule to current polling set.
+            var pollIds = serversToPoll.Select(s => s.Id).ToHashSet();
+            foreach (var stale in nextDueByServer.Keys.Where(id => !pollIds.Contains(id)).ToList())
                 nextDueByServer.Remove(stale);
 
             var now = DateTimeOffset.UtcNow;
-            foreach (var server in enabledServers)
+            foreach (var server in serversToPoll)
             {
                 if (!nextDueByServer.ContainsKey(server.Id))
                     nextDueByServer[server.Id] = now; // new server: refresh immediately
             }
 
-            // If nothing enabled, wait a bit and re-check.
-            if (enabledServers.Count == 0)
+            // If nothing to poll, wait a bit and re-check.
+            if (serversToPoll.Count == 0)
             {
                 await Task.WhenAny(
                     Task.Delay(TimeSpan.FromSeconds(15), cancellationToken),
@@ -172,7 +181,7 @@ public class MediaServerStateService : IMediaServerStateService
             }
 
             // Refresh any server that is due now.
-            var due = enabledServers
+            var due = serversToPoll
                 .Where(s => nextDueByServer.TryGetValue(s.Id, out var dueAt) && dueAt <= now)
                 .ToList();
 

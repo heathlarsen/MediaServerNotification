@@ -7,6 +7,7 @@
 @inject IMediaServerStoreService _serverSettingsService;
 @inject IMediaServerStateService _mediaServerStateService
 @inject DialogService _dialogService
+@implements IDisposable
 
 <RadzenFab Icon="add" Click="() => AddOrUpdateMediaServer()" />
 
@@ -57,6 +58,13 @@
     override protected async Task OnInitializedAsync()
     {
         await LoadServersAsync();
+
+        _mediaServerStateService.ServerUpdated += OnServerUpdated;
+        _mediaServerStateService.ServerDeleted += OnServerDeleted;
+
+        // Fire-and-forget: this is a long-running polling loop.
+        _ = _mediaServerStateService.StartAsync(isForeground: true);
+
         await base.OnInitializedAsync();
     }
 
@@ -72,6 +80,29 @@
         }
 
         return Task.CompletedTask;
+    }
+
+    private void OnServerUpdated(MediaServer server)
+    {
+        _ = InvokeAsync(() =>
+        {
+            MediaServers[server.Id] = server;
+
+            // Ensure new servers start collapsed by default.
+            collapsedPanels.Add(server.Id);
+
+            StateHasChanged();
+        });
+    }
+
+    private void OnServerDeleted(Guid serverId)
+    {
+        _ = InvokeAsync(() =>
+        {
+            MediaServers.Remove(serverId);
+            collapsedPanels.Remove(serverId);
+            StateHasChanged();
+        });
     }
 
     private bool IsCollapsed(Guid id) => collapsedPanels.Contains(id);
@@ -110,9 +141,6 @@
 
         // Persist + immediately update platform notifications (name/IP/etc) without waiting for polling.
         _mediaServerStateService.UpsertServer(newServer);
-        MediaServers.TryAdd(newServer.Id, newServer);
-        // ensure the newly added server starts collapsed
-        collapsedPanels.Add(newServer.Id);
     }
 
     private async Task DeleteMediaServer(MediaServer server)
@@ -129,7 +157,11 @@
             return;
         
         _mediaServerStateService.DeleteServer(server.Id);
-        await LoadServersAsync();
-        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        _mediaServerStateService.ServerUpdated -= OnServerUpdated;
+        _mediaServerStateService.ServerDeleted -= OnServerDeleted;
     }
 }
