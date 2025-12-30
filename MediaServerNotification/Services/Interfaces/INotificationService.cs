@@ -1,13 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using MediaServerNotification.Models;
 
 namespace MediaServerNotification.Services.Interfaces;
 
 public interface INotificationService
 {
-    void Start();
-    void Stop();
+    void EnsureChannels();
+
+    void ShowOrUpdateSummaryNotification(int enabledServerCount);
+
+    void ShowOrUpdateServerNotification(MediaServer server);
+
+    void RemoveServerNotification(Guid serverId);
+
+    void RemoveSummaryNotification();
 }

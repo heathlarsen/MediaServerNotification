@@ -35,6 +35,13 @@ public static class MauiProgram
         builder.Services.AddSingleton<IMediaServerStateService, MediaServerStateService>();
         builder.Services.AddScoped<IMediaServerClient<PlexMediaServerSettings>, PlexMediaServerClient>();
 
+#if ANDROID
+        builder.Services.AddSingleton(sp => new Platforms.Android.AndroidNotificationService(Android.App.Application.Context));
+        builder.Services.AddSingleton<INotificationService>(sp => sp.GetRequiredService<Platforms.Android.AndroidNotificationService>());
+#else
+        builder.Services.AddSingleton<INotificationService, NoopNotificationService>();
+#endif
+
         var app = builder.Build();
 
 #if ANDROID
