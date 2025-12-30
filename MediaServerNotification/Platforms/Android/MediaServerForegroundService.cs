@@ -2,11 +2,9 @@
 using Android.Content;
 using Android.OS;
 using AndroidX.Core.App;
+using MediaServerNotification.Extensions;
 using MediaServerNotification.Models;
 using MediaServerNotification.Services.Interfaces;
-using Microsoft.Extensions.DependencyInjection;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace MediaServerNotification.Platforms.Android
 {
@@ -21,10 +19,15 @@ namespace MediaServerNotification.Platforms.Android
         private const string NotificationChannelName = "Media Servers";
         private const string NotificationChannelDesc = "Notifications for running media server monitors";
 
+        private NotificationManager? _notificationManager;
+        private IMediaServerStateService? _stateService;
+        private bool _subscribed;
+
         public override void OnCreate()
         {
             base.OnCreate();
             EnsureNotificationChannel();
+            _notificationManager = GetSystemService(NotificationService) as NotificationManager;
         }
 
         public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
@@ -36,17 +39,16 @@ namespace MediaServerNotification.Platforms.Android
             StartForeground(ForegroundSummaryNotificationId, summaryNotification);
 
             // Post one ongoing notification per server (these can be many).
-            var manager = GetSystemService(NotificationService) as NotificationManager;
-            if (manager is not null)
+            if (_notificationManager is not null)
             {
                 foreach (var server in enabledServers)
                 {
-                    var serverId = server.Id.ToString();
-                    var serverName = server.Settings?.Name ?? "Media Server";
-                    var serverNotification = BuildServerNotification(serverId, serverName);
-                    manager.Notify(NotificationIdForServer(server.Id), serverNotification);
+                    var serverNotification = BuildServerNotification(server);
+                    _notificationManager.Notify(NotificationIdForServer(server.Id), serverNotification);
                 }
             }
+
+            EnsurePollingHooked();
 
             // If you want the service to continue running until explicitly stopped, use Sticky.
             return StartCommandResult.Sticky;
@@ -54,6 +56,21 @@ namespace MediaServerNotification.Platforms.Android
 
         public override void OnDestroy()
         {
+            try
+            {
+                if (_subscribed && _stateService is not null)
+                {
+                    _stateService.ServerUpdated -= OnServerUpdated;
+                    _stateService.EnabledServerCountUpdated -= OnEnabledServerCountUpdated;
+                    _subscribed = false;
+                }
+
+                _stateService?.Stop();
+            }
+            catch
+            {
+                // ignore
+            }
             base.OnDestroy();
         }
 
@@ -100,7 +117,7 @@ namespace MediaServerNotification.Platforms.Android
             builder.SetAutoCancel(false);
 
             // Optional: tap notification to open the app
-            var activityIntent = new Intent(this, typeof(global::MediaServerNotification.MainActivity));
+            var activityIntent = new Intent(this, typeof(MainActivity));
             activityIntent.SetFlags(ActivityFlags.SingleTop | ActivityFlags.ClearTop);
             var pending = PendingIntent.GetActivity(
                 this,
@@ -118,22 +135,42 @@ namespace MediaServerNotification.Platforms.Android
             return builder.Build()!;
         }
 
-        private Notification BuildServerNotification(string serverId, string serverName)
+        private Notification BuildServerNotification(MediaServer server)
         {
-            var notificationId = TryGetGuid(serverId, out var guid)
-                ? NotificationIdForServer(guid)
-                : ForegroundSummaryNotificationId + 1;
+            string Pluralize(string word, int count) => count > 1 ? word + "s" : word;
+            string? StreamTextBuilder(int streams, StreamType streamType) => streams == 0 ? null : $"{streams} {Pluralize(streamType.GetDescription(), streams)}";
+            string JoinStrings(string separator, string?[] values) => string.Join(separator, values.Where(x => !string.IsNullOrWhiteSpace(x)));
+
+            var notificationId = NotificationIdForServer(server.Id);
+            var serverName = server.Settings?.Name ?? "Media Server";
+
+            var streams = server.Stats?.Streams ?? new List<StreamSession>();
+            var resources = server.Stats?.Resources ?? new ServerResources();
+
+            var directPlays = streams.Count(x => x.StreamType == StreamType.DirectPlay);
+            var directStreams = streams.Count(x => x.StreamType == StreamType.DirectStream);
+            var transcodes = streams.Count(x => x.StreamType == StreamType.Transcode);
+            var textLine1 = JoinStrings(
+                " • ",
+                [ StreamTextBuilder(directPlays, StreamType.DirectPlay), StreamTextBuilder(directStreams, StreamType.DirectStream), StreamTextBuilder(transcodes, StreamType.Transcode) ]
+            );
+            var textLine2 = JoinStrings(
+                " • ",
+                [ $"CPU {(int)Math.Round(resources.HostCpuUsagePercent, 0)}% ", $"MEM {(int)Math.Round(resources.HostMemoryUsagePercent, 0)}%" , $"NET placeholder" ]
+            );
 
             var builder = new NotificationCompat.Builder(this, NotificationChannelId);
             builder.SetSmallIcon(Resource.Mipmap.appicon);
-            builder.SetContentTitle(serverName);
-            builder.SetContentText("Monitoring active");
+            builder.SetContentTitle($"{serverName} • {(streams.Any() ? $"{streams.Count} {Pluralize("Stream", streams.Count)}" : string.Empty)}");
+            builder.SetContentText("");
+            builder.SetStyle(new NotificationCompat.BigTextStyle().BigText(textLine1 + System.Environment.NewLine + textLine2));
             builder.SetOngoing(true);
             builder.SetAutoCancel(false);
             builder.SetOnlyAlertOnce(true);
             builder.SetGroup(NotificationGroupKey);
+            builder.SetPriority(NotificationCompat.PriorityMin);
 
-            // Optional: tap notification to open the app
+            // Tap notification to open the app
             var activityIntent = new Intent(this, typeof(global::MediaServerNotification.MainActivity));
             activityIntent.SetFlags(ActivityFlags.SingleTop | ActivityFlags.ClearTop);
             var pending = PendingIntent.GetActivity(
@@ -147,8 +184,6 @@ namespace MediaServerNotification.Platforms.Android
             return builder.Build()!;
         }
 
-        private static bool TryGetGuid(string value, out System.Guid guid) => System.Guid.TryParse(value, out guid);
-
         private static int NotificationIdForServer(System.Guid serverId)
         {
             // Deterministic, stable, positive int derived from GUID bytes.
@@ -159,6 +194,91 @@ namespace MediaServerNotification.Platforms.Android
             if (id == ForegroundSummaryNotificationId)
                 id++;
             return id;
+        }
+
+        private void EnsurePollingHooked()
+        {
+            if (_subscribed)
+                return;
+
+            try
+            {
+                var services = global::Microsoft.Maui.Controls.Application.Current?.Handler?.MauiContext?.Services;
+                _stateService = services?.GetService<IMediaServerStateService>();
+                if (_stateService is null)
+                    return;
+
+                _stateService.ServerUpdated += OnServerUpdated;
+                _stateService.EnabledServerCountUpdated += OnEnabledServerCountUpdated;
+                _subscribed = true;
+
+                // Fire and forget: service owns its own cancellation via Stop().
+                _ = _stateService.StartAsync(isForeground: true);
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+
+        private void OnEnabledServerCountUpdated(int enabledCount)
+        {
+            try
+            {
+                if (_notificationManager is null)
+                    return;
+
+                // Update summary text.
+                _notificationManager.Notify(ForegroundSummaryNotificationId, BuildSummaryNotification(enabledCount));
+
+                // Keep per-server notifications in sync with enabled set (cancel any that were disabled).
+                var enabledServers = GetEnabledServers();
+                var enabledIds = enabledServers.Select(s => s.Id).ToHashSet();
+
+                // Cancel notifications for servers that exist in the store but are no longer enabled.
+                var allServers = GetAllServers();
+                foreach (var server in allServers.Where(s => !enabledIds.Contains(s.Id)))
+                {
+                    _notificationManager.Cancel(NotificationIdForServer(server.Id));
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+
+        private void OnServerUpdated(MediaServer server)
+        {
+            try
+            {
+                if (_notificationManager is null)
+                    return;
+
+                // Only update notifications for servers that still have notifications enabled.
+                if (server?.Settings?.EnableNotification != true)
+                    return;
+
+                _notificationManager.Notify(NotificationIdForServer(server.Id), BuildServerNotification(server));
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+
+        private List<MediaServer> GetAllServers()
+        {
+            try
+            {
+                var services = global::Microsoft.Maui.Controls.Application.Current?.Handler?.MauiContext?.Services;
+                var store = services?.GetService<IMediaServerStoreService>();
+                return store?.GetAll() ?? new List<MediaServer>();
+            }
+            catch
+            {
+                return new List<MediaServer>();
+            }
         }
 
         private List<MediaServer> GetEnabledServers()

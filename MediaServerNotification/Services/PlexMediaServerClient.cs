@@ -19,12 +19,12 @@ public class PlexMediaServerClient : IMediaServerClient<PlexMediaServerSettings>
         //httpClient.BaseAddress = new UriBuilder(_config.ServerAddress).Uri;
     }
 
-    public async Task<List<StreamSession>> GetStreamSessionsAsync(PlexMediaServerSettings settings)
+    public async Task<List<StreamSession>> GetStreamSessionsAsync(PlexMediaServerSettings settings, CancellationToken cancellationToken = default)
     {
         var streams = new List<StreamSession>();
 
         // Request the current stream info from the Plex server
-        using (var response = await httpClient.GetAsync($"{settings.ServerAddress}/status/sessions?X-Plex-Token={settings.PlexToken}"))
+        using (var response = await httpClient.GetAsync($"{settings.ServerAddress}/status/sessions?X-Plex-Token={settings.PlexToken}", cancellationToken))
         {
             // Convert response into an XmlDocument
             XmlDocument xmlDoc = new XmlDocument();
@@ -48,13 +48,13 @@ public class PlexMediaServerClient : IMediaServerClient<PlexMediaServerSettings>
         return streams;
     }
 
-    public async Task<ServerResources> GetResourcesAsync(PlexMediaServerSettings settings)
+    public async Task<ServerResources> GetResourcesAsync(PlexMediaServerSettings settings, CancellationToken cancellationToken = default)
     {
         var resources = new ServerResources();
 
         // Request the current system resource info from the Plex server
         //httpClient.BaseAddress = new UriBuilder(settings.ServerAddress).Uri;
-        using (var response = await httpClient.GetAsync($"{settings.ServerAddress}/statistics/resources?X-Plex-Token={settings.PlexToken}&timespan=6"))
+        using (var response = await httpClient.GetAsync($"{settings.ServerAddress}/statistics/resources?X-Plex-Token={settings.PlexToken}&timespan=6", cancellationToken))
         {
             // Convert response into an XmlDocument
             XmlDocument xmlDoc = new XmlDocument();

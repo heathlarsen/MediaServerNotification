@@ -10,7 +10,7 @@ namespace MediaServerNotification.Services.Interfaces;
 public interface IMediaServerClient<TMediaServerSettings>
     where TMediaServerSettings : MediaServerSettings
 {
-    Task<List<StreamSession>> GetStreamSessionsAsync(TMediaServerSettings settings);
+    Task<List<StreamSession>> GetStreamSessionsAsync(TMediaServerSettings settings, CancellationToken cancellationToken = default);
 
-    Task<ServerResources> GetResourcesAsync(TMediaServerSettings settings);
+    Task<ServerResources> GetResourcesAsync(TMediaServerSettings settings, CancellationToken cancellationToken = default);
 }
