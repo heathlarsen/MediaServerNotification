@@ -1,10 +1,12 @@
 ﻿@page "/"
 @using MediaServerNotification.Models
+@using MediaServerNotification.Services
 @using MediaServerNotification.Services.Interfaces
 
-@inject IMediaServerService<PlexMediaServerSettings> _serverService;
-@inject IMediaServerManagerService _serverSettingsService;
-@inject DialogService DialogService
+@inject IMediaServerClient<PlexMediaServerSettings> _serverService;
+@inject IMediaServerStoreService _serverSettingsService;
+@inject IMediaServerStateService _mediaServerStateService
+@inject DialogService _dialogService
 
 <RadzenFab Icon="add" Click="() => AddOrUpdateMediaServer()" />
 
@@ -15,7 +17,7 @@
 
 <RadzenStack Orientation="Orientation.Vertical" JustifyContent="JustifyContent.SpaceBetween" Style="height:100%;">
     <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
-        @foreach (var server in MediaServers)
+        @foreach (var server in MediaServers.Values)
         {
             <RadzenPanel AllowCollapse="true" Collapsed="@IsCollapsed(server.Id)" @onclick="() => TogglePanel(server.Id)" style="cursor: pointer">
                 <HeaderTemplate>
@@ -49,7 +51,7 @@
 </RadzenStack>
 
 @code {
-    private List<MediaServer> MediaServers = new();
+    private Dictionary<Guid, MediaServer> MediaServers = new();
     private HashSet<Guid> collapsedPanels = new();
 
     override protected async Task OnInitializedAsync()
@@ -65,10 +67,21 @@
         var allServers = _serverSettingsService.GetAll();
         foreach (var server in allServers)
         {
-            MediaServers.Add(server);
-            // start collapsed by default; remove this line if you want them expanded initially
+            MediaServers.TryAdd(server.Id, server);
             collapsedPanels.Add(server.Id);
         }
+
+        // foreach (var server in MediaServers)
+        // {
+        //     await _mediaServerStateService.RefreshServerState(server.Value);
+        // }
+
+        // allServers = _serverSettingsService.GetAll();
+        // foreach (var server in allServers)
+        // {
+        //     MediaServers.TryAdd(server.Id, server);
+        //     collapsedPanels.Add(server.Id);
+        // }
     }
 
     private bool IsCollapsed(Guid id) => collapsedPanels.Contains(id);
@@ -85,12 +98,12 @@
         var parameters = new Dictionary<string, object>();
 
         if (update is not null)
-            parameters.Add(nameof(ServerConfig.ServerForEdit), update);
+            parameters.TryAdd(nameof(ServerConfig.ServerForEdit), update);
 
         if (copyFrom is not null)
-            parameters.Add(nameof(ServerConfig.ServerForCopy), copyFrom);
+            parameters.TryAdd(nameof(ServerConfig.ServerForCopy), copyFrom);
 
-        var newServer = await DialogService.OpenSideAsync<ServerConfig>(
+        var newServer = await _dialogService.OpenSideAsync<ServerConfig>(
             "Add Media Server",
             parameters: parameters,
             options: new SideDialogOptions
@@ -106,7 +119,7 @@
             return;
 
         _serverSettingsService.AddOrUpdate(newServer);
-        MediaServers.Add(newServer);
+        MediaServers.TryAdd(newServer.Id, newServer);
         // ensure the newly added server starts collapsed
         collapsedPanels.Add(newServer.Id);
     }
@@ -119,7 +132,7 @@
             ShowClose = false,
             CloseDialogOnOverlayClick = true
         };
-        var response = await DialogService.Confirm("Delete server?", options: confirmOptions);
+        var response = await _dialogService.Confirm("Delete server?", options: confirmOptions);
         
         if (response is null or false)
             return;

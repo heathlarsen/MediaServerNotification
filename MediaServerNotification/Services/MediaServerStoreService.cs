@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace MediaServerNotification.Services;
 
-public class MediaServerManagerService : IMediaServerManagerService
+public class MediaServerStoreService : IMediaServerStoreService
 {
     private const string StorageKey = "MediaServers";
 

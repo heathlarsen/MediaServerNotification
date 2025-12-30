@@ -7,10 +7,7 @@ using System.Threading.Tasks;
 
 namespace MediaServerNotification.Services.Interfaces;
 
-public interface IMediaServerManagerService
+internal interface IMediaServerStateService
 {
-    List<MediaServer> GetAll();
-    MediaServer? GetById(Guid id);
-    void AddOrUpdate(MediaServer server);
-    void Delete(Guid id);
+    Task RefreshServerState(MediaServer server);
 }

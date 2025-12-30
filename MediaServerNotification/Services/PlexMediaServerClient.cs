@@ -9,11 +9,11 @@ using System.Xml;
 
 namespace MediaServerNotification.Services;
 
-public class PlexMediaServerService : IMediaServerService<PlexMediaServerSettings>
+public class PlexMediaServerClient : IMediaServerClient<PlexMediaServerSettings>
 {
     private readonly HttpClient httpClient;
 
-    public PlexMediaServerService(HttpClient httpClient)
+    public PlexMediaServerClient(HttpClient httpClient)
     {
         this.httpClient = httpClient;
         //httpClient.BaseAddress = new UriBuilder(_config.ServerAddress).Uri;

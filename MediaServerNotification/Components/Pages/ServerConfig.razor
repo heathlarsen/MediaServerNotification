@@ -1,7 +1,7 @@
 ﻿@using MediaServerNotification.Models
-@using MediaServerNotification.Services.Interfaces
+@using MediaServerNotification.Services
 
-@inject DialogService DialogService
+@inject DialogService _dialogService
 
 @if (model is null)
 {
@@ -101,7 +101,7 @@ else
 
     private async Task OnSubmit()
     {
-        await DialogService.CloseSideAsync(model);
+        await _dialogService.CloseSideAsync(model);
     }
 
     private async Task OnInvalidSubmit()

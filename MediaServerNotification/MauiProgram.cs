@@ -2,8 +2,6 @@
 using MediaServerNotification.Services;
 using MediaServerNotification.Services.Interfaces;
 using Microsoft.Extensions.Logging;
-using Plugin.LocalNotification;
-using System.Net.Http;
 using Microsoft.Maui;
 using Microsoft.Maui.Controls.Hosting;
 using Microsoft.Maui.Hosting;
@@ -18,7 +16,6 @@ public static class MauiProgram
         var builder = MauiApp.CreateBuilder();
         builder
             .UseMauiApp<App>()
-            .UseLocalNotification()
             .ConfigureFonts(fonts =>
             {
                 fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
@@ -30,15 +27,29 @@ public static class MauiProgram
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
         builder.Logging.AddDebug();
-        builder.Services.AddHttpClient(); // Should this be named etc?
-        builder.Services.AddSingleton<IMediaServerManagerService, MediaServerManagerService>();
-        builder.Services.AddScoped<IMediaServerService<PlexMediaServerSettings>, PlexMediaServerService>();
 #endif
+
+        // Register core services for storing and polling media servers
+        builder.Services.AddHttpClient();
+        builder.Services.AddSingleton<IMediaServerStoreService, MediaServerStoreService>();
+        builder.Services.AddSingleton<IMediaServerStateService, MediaServerStateService>();
+        builder.Services.AddScoped<IMediaServerClient<PlexMediaServerSettings>, PlexMediaServerClient>();
+
+        var app = builder.Build();
 
 #if ANDROID
-        //builder.Services.AddSingleton<Services.INotificationService, Platforms.Android.NotificationService>();
+        try
+        {
+            // Start a single long-running foreground service once.
+            // The service itself is responsible for loading enabled servers and posting per-server notifications.
+            Platforms.Android.MediaServerForegroundService.StartMonitoring(Android.App.Application.Context);
+        }
+        catch
+        {
+            // Safe fail fast in case Android APIs not available at design time
+        }
 #endif
 
-        return builder.Build();
+        return app;
     }
 }

@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace MediaServerNotification.Services.Interfaces;
 
-public interface IMediaServerService<TMediaServerSettings>
+public interface IMediaServerClient<TMediaServerSettings>
     where TMediaServerSettings : MediaServerSettings
 {
     Task<List<StreamSession>> GetStreamSessionsAsync(TMediaServerSettings settings);
