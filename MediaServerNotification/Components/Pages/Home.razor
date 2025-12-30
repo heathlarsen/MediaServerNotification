@@ -60,7 +60,7 @@
         await base.OnInitializedAsync();
     }
 
-    private async Task LoadServersAsync()
+    private Task LoadServersAsync()
     {
         MediaServers.Clear();
         collapsedPanels.Clear();
@@ -71,17 +71,7 @@
             collapsedPanels.Add(server.Id);
         }
 
-        // foreach (var server in MediaServers)
-        // {
-        //     await _mediaServerStateService.RefreshServerState(server.Value);
-        // }
-
-        // allServers = _serverSettingsService.GetAll();
-        // foreach (var server in allServers)
-        // {
-        //     MediaServers.TryAdd(server.Id, server);
-        //     collapsedPanels.Add(server.Id);
-        // }
+        return Task.CompletedTask;
     }
 
     private bool IsCollapsed(Guid id) => collapsedPanels.Contains(id);
@@ -118,7 +108,8 @@
         if (newServer is not MediaServer)
             return;
 
-        _serverSettingsService.AddOrUpdate(newServer);
+        // Persist + immediately update platform notifications (name/IP/etc) without waiting for polling.
+        _mediaServerStateService.UpsertServer(newServer);
         MediaServers.TryAdd(newServer.Id, newServer);
         // ensure the newly added server starts collapsed
         collapsedPanels.Add(newServer.Id);
@@ -137,7 +128,7 @@
         if (response is null or false)
             return;
         
-        _serverSettingsService.Delete(server.Id);
+        _mediaServerStateService.DeleteServer(server.Id);
         await LoadServersAsync();
         StateHasChanged();
     }

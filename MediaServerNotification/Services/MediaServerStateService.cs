@@ -11,8 +11,10 @@ public class MediaServerStateService : IMediaServerStateService
     private readonly object _gate = new();
     private CancellationTokenSource? _cts;
     private Task? _loopTask;
+    private readonly SemaphoreSlim _wakeSignal = new(0, int.MaxValue);
 
     public event Action<MediaServer>? ServerUpdated;
+    public event Action<Guid>? ServerDeleted;
     public event Action<int>? EnabledServerCountUpdated;
 
     public MediaServerStateService(
@@ -68,6 +70,56 @@ public class MediaServerStateService : IMediaServerStateService
         ServerUpdated?.Invoke(server);
     }
 
+    public void UpsertServer(MediaServer server)
+    {
+        if (server is null)
+            return;
+
+        _storeService.AddOrUpdate(server);
+
+        // Immediately reflect changes in platform notifications (name/IP/enable toggles/etc).
+        ServerUpdated?.Invoke(server);
+        EnabledServerCountUpdated?.Invoke(GetEnabledServerCount());
+
+        SignalWake();
+    }
+
+    public void DeleteServer(Guid id)
+    {
+        _storeService.Delete(id);
+
+        // Ensure platform notifications get removed even though the server no longer exists in the store.
+        ServerDeleted?.Invoke(id);
+        EnabledServerCountUpdated?.Invoke(GetEnabledServerCount());
+
+        SignalWake();
+    }
+
+    private int GetEnabledServerCount()
+    {
+        try
+        {
+            return (_storeService.GetAll() ?? new List<MediaServer>())
+                .Count(s => s?.Settings?.EnableNotification == true);
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private void SignalWake()
+    {
+        try
+        {
+            _wakeSignal.Release();
+        }
+        catch (SemaphoreFullException)
+        {
+            // ignore: best-effort wakeup
+        }
+    }
+
     private async Task RunPollingLoopAsync(bool isForeground, CancellationToken cancellationToken)
     {
         var nextDueByServer = new Dictionary<Guid, DateTimeOffset>();
@@ -112,7 +164,10 @@ public class MediaServerStateService : IMediaServerStateService
             // If nothing enabled, wait a bit and re-check.
             if (enabledServers.Count == 0)
             {
-                await Task.Delay(TimeSpan.FromSeconds(15), cancellationToken);
+                await Task.WhenAny(
+                    Task.Delay(TimeSpan.FromSeconds(15), cancellationToken),
+                    _wakeSignal.WaitAsync(cancellationToken)
+                );
                 continue;
             }
 
@@ -149,7 +204,10 @@ public class MediaServerStateService : IMediaServerStateService
             if (delay < TimeSpan.FromSeconds(1))
                 delay = TimeSpan.FromSeconds(1);
 
-            await Task.Delay(delay, cancellationToken);
+            await Task.WhenAny(
+                Task.Delay(delay, cancellationToken),
+                _wakeSignal.WaitAsync(cancellationToken)
+            );
         }
     }
 }

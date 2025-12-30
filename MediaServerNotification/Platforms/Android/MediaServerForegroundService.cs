@@ -54,6 +54,7 @@ namespace MediaServerNotification.Platforms.Android
                 if (_subscribed && _stateService is not null)
                 {
                     _stateService.ServerUpdated -= OnServerUpdated;
+                    _stateService.ServerDeleted -= OnServerDeleted;
                     _stateService.EnabledServerCountUpdated -= OnEnabledServerCountUpdated;
                     _subscribed = false;
                 }
@@ -82,6 +83,7 @@ namespace MediaServerNotification.Platforms.Android
                     return;
 
                 _stateService.ServerUpdated += OnServerUpdated;
+                _stateService.ServerDeleted += OnServerDeleted;
                 _stateService.EnabledServerCountUpdated += OnEnabledServerCountUpdated;
                 _subscribed = true;
 
@@ -133,6 +135,21 @@ namespace MediaServerNotification.Platforms.Android
                     return;
 
                 _notificationService.ShowOrUpdateServerNotification(server);
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+
+        private void OnServerDeleted(Guid serverId)
+        {
+            try
+            {
+                if (_notificationService is null)
+                    return;
+
+                _notificationService.RemoveServerNotification(serverId);
             }
             catch
             {
