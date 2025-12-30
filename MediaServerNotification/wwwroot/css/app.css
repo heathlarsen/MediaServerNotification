@@ -1,4 +1,13 @@
-﻿/*#if (SampleContent)*/
+﻿/* RADZEN GLOBAL OVERRIDES */
+/* Override dialog bottom slider heights to auto-adjust based on content, used by ServerConfig */
+.rz-dialog-side-position-bottom
+{
+    height: unset !important;
+    min-height: unset !important;
+    max-height: 80%;
+}
+
+/*#if (SampleContent)*/
 html, body, #app {
     height: 100%;
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
