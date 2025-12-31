@@ -8,6 +8,18 @@ namespace MediaServerNotification.Services;
 public class MediaServerStoreService : IMediaServerStoreService
 {
     private const string StorageKey = "MediaServers";
+    private static readonly JsonSerializerOptions SerializerOptions = CreateSerializerOptions();
+
+    private static JsonSerializerOptions CreateSerializerOptions()
+    {
+        var options = new JsonSerializerOptions
+        {
+            WriteIndented = true
+        };
+
+        options.Converters.Add(new MediaServerSettingsJsonConverter());
+        return options;
+    }
 
     public List<MediaServer> GetAll()
     {
@@ -16,9 +28,7 @@ public class MediaServerStoreService : IMediaServerStoreService
         if (string.IsNullOrEmpty(json))
             return new List<MediaServer>();
 
-        var options = new JsonSerializerOptions();
-        options.Converters.Add(new MediaServerSettingsJsonConverter());
-        var list = JsonSerializer.Deserialize<List<MediaServer>>(json, options)
+        var list = JsonSerializer.Deserialize<List<MediaServer>>(json, SerializerOptions)
                    ?? new List<MediaServer>();
 
         return list;
@@ -53,7 +63,7 @@ public class MediaServerStoreService : IMediaServerStoreService
 
     private void Save(List<MediaServer> list)
     {
-        var json = JsonSerializer.Serialize(list, new JsonSerializerOptions { WriteIndented = true });
+        var json = JsonSerializer.Serialize(list, SerializerOptions);
         Preferences.Set(StorageKey, json);
     }
 }
