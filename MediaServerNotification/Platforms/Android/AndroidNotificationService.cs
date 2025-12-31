@@ -2,6 +2,7 @@ using Android.App;
 using Android.Content;
 using Android.OS;
 using AndroidX.Core.App;
+using AndroidX.Core.Content;
 using MediaServerNotification.Extensions;
 using MediaServerNotification.Models;
 using MediaServerNotification.Services.Interfaces;
@@ -48,22 +49,58 @@ public sealed class AndroidNotificationService : INotificationService
 #pragma warning restore CA1416
     }
 
+    public bool CanPostNotifications()
+    {
+        // POST_NOTIFICATIONS became a runtime permission on Android 13 (API 33).
+        if (Build.VERSION.SdkInt < BuildVersionCodes.Tiramisu)
+            return true;
+
+        try
+        {
+            return ContextCompat.CheckSelfPermission(_context, global::Android.Manifest.Permission.PostNotifications) == global::Android.Content.PM.Permission.Granted;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public void ShowOrUpdateSummaryNotification(int enabledServerCount)
     {
+        if (!CanPostNotifications())
+            return;
+
         var manager = GetManager();
         if (manager is null)
             return;
 
-        manager.Notify(ForegroundSummaryNotificationId, BuildSummaryNotification(enabledServerCount));
+        try
+        {
+            manager.Notify(ForegroundSummaryNotificationId, BuildSummaryNotification(enabledServerCount));
+        }
+        catch
+        {
+            // ignore (e.g., permission not granted on Android 13+)
+        }
     }
 
     public void ShowOrUpdateServerNotification(MediaServer server)
     {
+        if (!CanPostNotifications())
+            return;
+
         var manager = GetManager();
         if (manager is null)
             return;
 
-        manager.Notify(NotificationIdForServer(server.Id), BuildServerNotification(server));
+        try
+        {
+            manager.Notify(NotificationIdForServer(server.Id), BuildServerNotification(server));
+        }
+        catch
+        {
+            // ignore (e.g., permission not granted on Android 13+)
+        }
     }
 
     public void RemoveServerNotification(Guid serverId)
@@ -72,7 +109,14 @@ public sealed class AndroidNotificationService : INotificationService
         if (manager is null)
             return;
 
-        manager.Cancel(NotificationIdForServer(serverId));
+        try
+        {
+            manager.Cancel(NotificationIdForServer(serverId));
+        }
+        catch
+        {
+            // ignore
+        }
     }
 
     public void RemoveSummaryNotification()
@@ -81,7 +125,14 @@ public sealed class AndroidNotificationService : INotificationService
         if (manager is null)
             return;
 
-        manager.Cancel(ForegroundSummaryNotificationId);
+        try
+        {
+            manager.Cancel(ForegroundSummaryNotificationId);
+        }
+        catch
+        {
+            // ignore
+        }
     }
 
     public Notification BuildSummaryNotification(int enabledServerCount)

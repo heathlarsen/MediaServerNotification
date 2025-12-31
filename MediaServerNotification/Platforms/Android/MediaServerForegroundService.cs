@@ -1,12 +1,13 @@
 ﻿using Android.App;
 using Android.Content;
 using Android.OS;
+using Android.Runtime;
 using MediaServerNotification.Models;
 using MediaServerNotification.Services.Interfaces;
 
 namespace MediaServerNotification.Platforms.Android
 {
-    [Service(Exported = true)]
+    [Register("MediaServerNotification.Platforms.Android.MediaServerForegroundService")]
     public class MediaServerForegroundService : Service
     {
         private AndroidNotificationService? _notificationService;
@@ -25,26 +26,38 @@ namespace MediaServerNotification.Platforms.Android
 
         public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
         {
-            var enabledServers = GetEnabledServers();
+            try
+            {
+                if (_notificationService is null || !_notificationService.CanPostNotifications())
+                {
+                    // On Android 13+, if notification permission isn't granted, a foreground service cannot run safely.
+                    StopSelf();
+                    return StartCommandResult.NotSticky;
+                }
 
-            // One foreground notification is required; keep it as a group summary.
-            var summaryNotification = _notificationService?.BuildSummaryNotification(enabledServers.Count);
-            if (summaryNotification is not null)
+                var enabledServers = GetEnabledServers();
+
+                // One foreground notification is required; keep it as a group summary.
+                var summaryNotification = _notificationService.BuildSummaryNotification(enabledServers.Count);
                 StartForeground(AndroidNotificationService.ForegroundSummaryNotificationId, summaryNotification);
 
-            // Post one ongoing notification per server (these can be many).
-            if (_notificationService is not null)
-            {
+                // Post one ongoing notification per server (these can be many).
                 foreach (var server in enabledServers)
                 {
                     _notificationService.ShowOrUpdateServerNotification(server);
                 }
+
+                EnsurePollingHooked();
+
+                // If you want the service to continue running until explicitly stopped, use Sticky.
+                return StartCommandResult.Sticky;
             }
-
-            EnsurePollingHooked();
-
-            // If you want the service to continue running until explicitly stopped, use Sticky.
-            return StartCommandResult.Sticky;
+            catch
+            {
+                // Any exception here can crash the whole process on some devices; fail gracefully.
+                try { StopSelf(); } catch { /* ignore */ }
+                return StartCommandResult.NotSticky;
+            }
         }
 
         public override void OnDestroy()

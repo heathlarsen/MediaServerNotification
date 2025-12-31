@@ -44,19 +44,6 @@ public static class MauiProgram
 
         var app = builder.Build();
 
-#if ANDROID
-        try
-        {
-            // Start a single long-running foreground service once.
-            // The service itself is responsible for loading enabled servers and posting per-server notifications.
-            Platforms.Android.MediaServerForegroundService.StartMonitoring(Android.App.Application.Context);
-        }
-        catch
-        {
-            // Safe fail fast in case Android APIs not available at design time
-        }
-#endif
-
         return app;
     }
 }
